@@ -8,6 +8,7 @@ import winston from 'winston';
 import morgan from 'morgan';
 import fs from 'fs';
 import path from 'path';
+import cors from 'cors';
 
 const app = express();
 
@@ -46,6 +47,22 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
     },
   },
+}));
+
+// Enforce HTTPS in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(helmet.hsts({
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true
+  }));
+}
+
+// CORS configuration
+app.use(cors({
+  origin: ['http://localhost:3000'], // Add your trusted domains here
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Rate limiting
