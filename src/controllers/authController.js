@@ -1,6 +1,20 @@
 import { hash, verify, Algorithm } from '@node-rs/argon2';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import winston from 'winston';
+
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'logs/combined.log' })
+  ]
+});
 
 const argon2Options = {
   memoryCost: 65536, // 64 MB
@@ -49,18 +63,21 @@ export const signup = async (req, res) => {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
+      logger.warn('Signup attempt with missing fields', { username, email, ip: req.ip });
       return res.status(400).json({ message: 'Username, email, and password are required' });
     }
 
     // Validate password strength
     const passwordError = validatePasswordStrength(password);
     if (passwordError) {
+      logger.warn('Signup attempt with weak password', { username, email, ip: req.ip });
       return res.status(400).json({ message: passwordError });
     }
 
     // Check if user exists
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
+      logger.warn('Signup attempt with existing username or email', { username, email, ip: req.ip });
       return res.status(409).json({ message: 'Username or email already exists' });
     }
 
@@ -76,7 +93,7 @@ export const signup = async (req, res) => {
 
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
-    console.error('Signup error:', error);
+    logger.error('Signup error:', error);
     if (error.code === 11000) { // Duplicate key error
       res.status(409).json({ message: 'Username or email already exists' });
     } else {
@@ -90,18 +107,19 @@ export const login = async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
+      logger.warn('Login attempt with missing fields', { username, ip: req.ip });
       return res.status(400).json({ message: 'Username and password are required' });
     }
 
     const user = await User.findOne({ username });
     if (!user) {
-      console.log(`Login attempt for non-existent user: ${username}`);
+      logger.warn(`Login attempt for non-existent user: ${username}`, { ip: req.ip });
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Check if account is locked
     if (user.isLocked) {
-      console.log(`Login attempt on locked account: ${username}`);
+      logger.warn(`Login attempt on locked account: ${username}`, { ip: req.ip });
       return res.status(423).json({ message: 'Account is temporarily locked due to too many failed attempts' });
     }
 
@@ -109,7 +127,7 @@ export const login = async (req, res) => {
     if (!isValidPassword) {
       // Increment failed attempts
       await user.incLoginAttempts();
-      console.log(`Failed login attempt for user: ${username}`);
+      logger.warn(`Failed login attempt for user: ${username}`, { ip: req.ip });
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
@@ -137,10 +155,10 @@ export const login = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
-    console.log(`Successful login for user: ${username}`);
+    logger.info(`Successful login for user: ${username}`, { ip: req.ip });
     res.json({ message: 'Login successful' });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

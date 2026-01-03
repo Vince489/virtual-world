@@ -1,0 +1,18 @@
+POST http://localhost:3080/auth/signup
+Content-Type: application/json
+
+{
+    "username": {"$or": [{"username": "admin"}, {"username": "bobz"}]},
+    "email": "test@example.com",
+    "password": "1234qwQW!"
+}
+
+###
+POST http://localhost:3080/auth/login
+Content-Type: application/json
+
+{
+    "username": "bob",
+    "email": "bob@aol.com",
+    "password": "1234qwQW!"
+}

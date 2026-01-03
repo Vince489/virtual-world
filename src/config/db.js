@@ -46,7 +46,7 @@ const connectDB = async () => {
           // If admin command fails (e.g. permission), kill the zombie interval
           clearInterval(monitorInterval);
         }
-      }, 10000);
+      }, 30000);
 
       return;
     } catch (error) {
