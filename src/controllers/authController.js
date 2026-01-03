@@ -50,12 +50,20 @@ const validatePasswordStrength = (password) => {
 };
 
 // Generate JWT tokens
-const generateAccessToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE });
+const generateAccessToken = (userId, tokenVersion) => {
+  return jwt.sign(
+    { userId, tokenVersion },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE }
+  );
 };
 
-const generateRefreshToken = (userId) => {
-  return jwt.sign({ userId }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: process.env.REFRESH_TOKEN_EXPIRE });
+const generateRefreshToken = (userId, tokenVersion) => {
+  return jwt.sign(
+    { userId, tokenVersion },
+    process.env.REFRESH_TOKEN_SECRET,
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRE }
+  );
 };
 
 export const signup = async (req, res) => {
@@ -136,9 +144,9 @@ export const login = async (req, res) => {
       await user.resetLoginAttempts();
     }
 
-    // Generate tokens
-    const accessToken = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    // Generate tokens with tokenVersion
+    const accessToken = generateAccessToken(user._id, user.tokenVersion);
+    const refreshToken = generateRefreshToken(user._id, user.tokenVersion);
 
     // Set secure cookies
     res.cookie('accessToken', accessToken, {
@@ -159,6 +167,106 @@ export const login = async (req, res) => {
     res.json({ message: 'Login successful' });
   } catch (error) {
     logger.error('Login error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * Refresh access token using refresh token
+ */
+export const refreshToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+      logger.warn('Refresh token attempt with no token provided', { ip: req.ip });
+      return res.status(401).json({ message: 'No refresh token provided' });
+    }
+
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+
+    // Find user in database
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      logger.warn(`Refresh token attempt for non-existent user: ${decoded.userId}`, { ip: req.ip });
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    // Check if token version matches
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      logger.warn(`Refresh token attempt with invalid token version for user: ${user.username}`, { ip: req.ip });
+      return res.status(401).json({ message: 'Token version mismatch - please login again' });
+    }
+
+    // Generate new access token
+    const newAccessToken = generateAccessToken(user._id, user.tokenVersion);
+
+    // Set new access token cookie
+    res.cookie('accessToken', newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 1000 // 1 hour
+    });
+
+    logger.info(`Access token refreshed for user: ${user.username}`, { ip: req.ip });
+    res.json({ message: 'Access token refreshed successfully' });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      logger.warn('Invalid refresh token attempt', { ip: req.ip });
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      logger.warn('Expired refresh token attempt', { ip: req.ip });
+      return res.status(401).json({ message: 'Refresh token expired' });
+    }
+    logger.error('Refresh token error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * Logout - clear tokens for current session
+ */
+export const logout = async (req, res) => {
+  try {
+    // Clear cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    logger.info('User logged out', { ip: req.ip });
+    res.json({ message: 'Logout successful' });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * Logout from all devices - increment token version
+ */
+export const logoutAll = async (req, res) => {
+  try {
+    // Get user from request (should be set by verifyTokenVersion middleware)
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    // Increment token version
+    await User.findByIdAndUpdate(user._id, { $inc: { tokenVersion: 1 } });
+
+    // Clear cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    logger.info(`User ${user.username} logged out from all devices`, { ip: req.ip });
+    res.json({ message: 'Logged out from all devices successfully' });
+  } catch (error) {
+    logger.error('Logout all error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

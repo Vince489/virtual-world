@@ -1,6 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { signup, login } from '../controllers/authController.js';
+import { signup, login, refreshToken, logout, logoutAll } from '../controllers/authController.js';
+import { verifyTokenVersion } from '../middleware/verifyTokenVersion.js';
 
 const router = express.Router();
 
@@ -11,7 +12,13 @@ const authLimiter = rateLimit({
   message: 'Too many authentication attempts, please try again later.',
 });
 
+// Public routes
 router.post('/signup', authLimiter, signup);
 router.post('/login', authLimiter, login);
+router.post('/refresh-token', refreshToken);
+router.post('/logout', logout); // Public logout for cookie clearing
+
+// Protected routes - require token version verification
+router.post('/logout-all', verifyTokenVersion, logoutAll);
 
 export default router;

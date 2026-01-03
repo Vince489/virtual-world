@@ -9,6 +9,8 @@
    - [JWT Tokens](#jwt-tokens)
    - [Login and Signup](#login-and-signup)
    - [Secure Cookies](#secure-cookies)
+   - [Token Version Verification](#token-version-verification)
+   - [Hybrid Logout Approach](#hybrid-logout-approach)
 4. [Security Enhancements](#security-enhancements)
    - [Input Validation](#input-validation)
    - [NoSQL Injection Prevention](#nosql-injection-prevention)
@@ -43,6 +45,7 @@ This document provides a comprehensive overview of the Express API backend and a
 │   ├── controllers/
 │   │   └── authController.js
 │   ├── middleware/
+│   │   └── verifyTokenVersion.js
 │   ├── models/
 │   │   └── User.js
 │   ├── routes/
@@ -71,6 +74,19 @@ The `User` model is defined in `src/models/User.js` and includes:
 - **Schema Validation**: Ensures data integrity and prevents NoSQL injection.
 - **Password Hashing**: Uses Argon2 for secure password storage.
 - **Login Attempts Tracking**: Monitors failed login attempts and locks accounts after too many failures.
+- **Token Versioning**: Implements token versioning for secure logout from all devices.
+
+**Schema Fields:**
+```javascript
+const userSchema = new mongoose.Schema({
+  username: { /* ... */ },
+  email: { /* ... */ },
+  password: { /* ... */ },
+  failedLoginAttempts: { type: Number, default: 0 },
+  lockUntil: { type: Date },
+  tokenVersion: { type: Number, default: 0 } // For token versioning
+});
+```
 
 ### Password Hashing
 - **Algorithm**: Argon2id (memory-hard, resistant to brute-force attacks).
@@ -85,14 +101,25 @@ The `User` model is defined in `src/models/User.js` and includes:
   ```
 
 ### JWT Tokens
-- **Access Token**: Short-lived (1 hour) for API access.
+- **Access Token**: Short-lived (15 minutes) for API access.
 - **Refresh Token**: Long-lived (7 days) for obtaining new access tokens.
+- **Token Versioning**: Implements token versioning for secure logout from all devices.
 - **Generation**:
   ```javascript
-  const generateAccessToken = (userId) => {
-    return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE });
+  const generateAccessToken = (userId, tokenVersion) => {
+    return jwt.sign(
+      { userId, tokenVersion },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRE }
+    );
   };
   ```
+
+- **Token Version Strategy**: Each user has a tokenVersion field that is incremented when logging out from all devices, invalidating all existing tokens.
+- **Refresh Token Endpoint**: `/auth/refresh-token` allows obtaining a new access token using a valid refresh token.
+- **Logout Endpoints**:
+  - `/auth/logout` - Public route for clearing cookies (no authentication required)
+  - `/auth/logout-all` - Protected route for logging out from all devices by incrementing token version
 
 ### Login and Signup
 - **Signup**: Validates input, checks for existing users, and hashes passwords.
@@ -113,6 +140,47 @@ The `User` model is defined in `src/models/User.js` and includes:
     maxAge: 60 * 60 * 1000 // 1 hour
   });
   ```
+
+### Token Version Verification
+- **Purpose**: Verifies that the token version in the JWT matches the user's current token version in the database.
+- **Implementation**: Middleware that checks token version before allowing access to protected routes.
+- **Code**:
+  ```javascript
+  export const verifyTokenVersion = async (req, res, next) => {
+    try {
+      const token = req.cookies.accessToken;
+      if (!token) {
+        return res.status(401).json({ message: 'No token provided' });
+      }
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.userId);
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      if (decoded.tokenVersion !== user.tokenVersion) {
+        return res.status(401).json({ message: 'Token version mismatch - please login again' });
+      }
+
+      req.user = user;
+      next();
+    } catch (error) {
+      // Error handling...
+    }
+  };
+  ```
+
+### Hybrid Logout Approach
+- **Purpose**: Provides a balance between security and usability for logout functionality.
+- **Implementation**:
+  - **Public Logout Route**: `/auth/logout` is public and only clears cookies, allowing users to logout even with expired tokens.
+  - **Protected Logout-All Route**: `/auth/logout-all` is protected and increments the token version, invalidating all tokens across devices.
+- **Benefits**:
+  - Users can always clear their cookies, even with expired tokens
+  - Sensitive operations (like invalidating all sessions) remain protected
+  - Frontend can handle both scenarios gracefully
 
 ---
 

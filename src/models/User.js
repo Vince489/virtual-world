@@ -27,6 +27,10 @@ const userSchema = new mongoose.Schema({
   },
   lockUntil: {
     type: Date
+  },
+  tokenVersion: {
+    type: Number,
+    default: 0
   }
 }, {
   strict: true, // Prevent additional fields
