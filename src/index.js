@@ -8,6 +8,7 @@ import winston from 'winston';
 import morgan from 'morgan';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import cors from 'cors';
 
 const app = express();
@@ -29,6 +30,8 @@ const logger = winston.createLogger({
 });
 
 // Configure Morgan for HTTP request logging
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const accessLogStream = fs.createWriteStream(
   path.join(__dirname, 'logs/access.log'),
   { flags: 'a' }
@@ -89,7 +92,7 @@ app.use((req, res, next) => {
 
 // Note: express-rate-limit doesn't emit events for logging in this version
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 app.get('/', (req, res) => {
   res.send('Hello World');
