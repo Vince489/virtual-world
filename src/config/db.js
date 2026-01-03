@@ -3,35 +3,70 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 5000; // 5 seconds
+let monitorInterval = null; // Store interval globally to prevent zombies
+
+// 1. Move Listeners OUTSIDE the function so they only attach ONCE
+mongoose.connection.on('connected', () => console.log('✅ Mongoose connected to DB Cluster'));
+mongoose.connection.on('error', (err) => console.error(`❌ Mongoose connection error: ${err}`));
+mongoose.connection.on('disconnected', () => console.log('⚠️ Mongoose disconnected'));
+mongoose.connection.on('poolReady', () => console.log('🏊 Pool Ready'));
+
 const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      // Connection pooling
-      maxPoolSize: 10, // Maximum number of connections in the connection pool
-      minPoolSize: 2,  // Minimum number of connections in the connection pool
+  // 2. Prevent "Double-Connecting" zombies
+  if (mongoose.connection.readyState === 1) return;
 
-      // Timeouts
-      serverSelectionTimeoutMS: 5000, // How long to wait for server selection
-      socketTimeoutMS: 45000, // How long to wait for socket operations
-      connectTimeoutMS: 10000, // How long to wait for initial connection
+  mongoose.set('bufferCommands', false);
 
-      // Security - enable SSL in production
-      ssl: process.env.NODE_ENV === 'production',
+  let retryCount = 0;
+  while (retryCount < MAX_RETRIES) {
+    try {
+      await mongoose.connect(process.env.MONGODB_URI, {
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+        connectTimeoutMS: 10000,
+        ssl: process.env.NODE_ENV === 'production',
+        maxIdleTimeMS: 30000
+      });
 
-      // Other options
-      maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
-      family: 4 // Use IPv4, skip trying IPv6
-    });
+      // 3. Clear existing interval before starting a new one (Harden against Interval Zombies)
+      if (monitorInterval) clearInterval(monitorInterval);
 
-    // Disable mongoose buffering globally
-    mongoose.set('bufferCommands', false);
+      const admin = mongoose.connection.getClient().db('admin').admin();
+      monitorInterval = setInterval(async () => {
+        try {
+          if (mongoose.connection.readyState === 1) {
+            const status = await admin.serverStatus();
+            console.log(`📊 Active: ${status.connections.current} | Available: ${status.connections.available}`);
+          }
+        } catch (e) {
+          // If admin command fails (e.g. permission), kill the zombie interval
+          clearInterval(monitorInterval);
+        }
+      }, 10000);
 
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-    console.log(`Connection pool size: ${conn.connections.length}`);
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
+      return;
+    } catch (error) {
+      retryCount++;
+      console.error(`Attempt ${retryCount} failed.`);
+      if (retryCount >= MAX_RETRIES) process.exit(1);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
 };
+
+// 4. Harden the Shutdown logic
+const gracefulExit = async () => {
+  console.log('Closing Mongoose connection...');
+  if (monitorInterval) clearInterval(monitorInterval); // Kill the interval zombie
+  await mongoose.connection.close();
+  process.exit(0);
+};
+
+process.on('SIGINT', gracefulExit);
+process.on('SIGTERM', gracefulExit);
 
 export default connectDB;
