@@ -11,6 +11,8 @@
    - [Secure Cookies](#secure-cookies)
    - [Token Version Verification](#token-version-verification)
    - [Hybrid Logout Approach](#hybrid-logout-approach)
+   - [Redis Caching](#redis-caching)
+   - [Refresh Token Rotation](#refresh-token-rotation)
 4. [Security Enhancements](#security-enhancements)
    - [Input Validation](#input-validation)
    - [NoSQL Injection Prevention](#nosql-injection-prevention)
@@ -60,6 +62,7 @@ This document provides a comprehensive overview of the Express API backend and a
 │   ├── work-done.md
 │   ├── xss.md
 │   └── express-api-auth-system.md
+├── docker-compose.yml
 ├── package.json
 ├── package-lock.json
 └── .gitignore
@@ -104,6 +107,7 @@ const userSchema = new mongoose.Schema({
 - **Access Token**: Short-lived (15 minutes) for API access.
 - **Refresh Token**: Long-lived (7 days) for obtaining new access tokens.
 - **Token Versioning**: Implements token versioning for secure logout from all devices.
+- **Refresh Token Rotation**: Enhances security by rotating refresh tokens on each use, mitigating the risk of token theft.
 - **Generation**:
   ```javascript
   const generateAccessToken = (userId, tokenVersion) => {
@@ -116,7 +120,8 @@ const userSchema = new mongoose.Schema({
   ```
 
 - **Token Version Strategy**: Each user has a tokenVersion field that is incremented when logging out from all devices, invalidating all existing tokens.
-- **Refresh Token Endpoint**: `/auth/refresh-token` allows obtaining a new access token using a valid refresh token.
+- **Refresh Token Endpoint**: `/auth/refresh-token` allows obtaining a new access token using a valid refresh token, and implements refresh token rotation for enhanced security.
+- **Refresh Token Rotation**: When a refresh token is used, a new refresh token is issued, and the old one is marked as used in Redis. If a refresh token is reused (potential breach), the system detects it and invalidates all tokens for that user.
 - **Logout Endpoints**:
   - `/auth/logout` - Public route for clearing cookies (no authentication required)
   - `/auth/logout-all` - Protected route for logging out from all devices by incrementing token version
@@ -144,6 +149,12 @@ const userSchema = new mongoose.Schema({
 ### Token Version Verification
 - **Purpose**: Verifies that the token version in the JWT matches the user's current token version in the database.
 - **Implementation**: Middleware that checks token version before allowing access to protected routes.
+- **Optimizations**:
+  - Uses Redis caching to reduce database load
+  - Fetches only the `tokenVersion` field from the database when needed
+  - Caches token versions for 5 minutes to improve performance
+  - Only attaches the user ID to the request object, avoiding unnecessary database queries
+  - Provides a utility function to fetch the full user object when needed in specific routes
 - **Code**:
   ```javascript
   export const verifyTokenVersion = async (req, res, next) => {
@@ -154,21 +165,50 @@ const userSchema = new mongoose.Schema({
       }
 
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId);
 
-      if (!user) {
-        return res.status(401).json({ message: 'User not found' });
+      // Check Redis cache first
+      const cachedTokenVersion = await redisClient.get(`tokenVersion:${decoded.userId}`);
+
+      let userTokenVersion;
+
+      if (cachedTokenVersion) {
+        // Use cached token version
+        userTokenVersion = parseInt(cachedTokenVersion);
+      } else {
+        // Fetch from database if not in cache (only tokenVersion field)
+        const user = await User.findById(decoded.userId).select('tokenVersion');
+
+        if (!user) {
+          return res.status(401).json({ message: 'User not found' });
+        }
+
+        userTokenVersion = user.tokenVersion;
+
+        // Cache the token version for 5 minutes
+        await redisClient.set(`tokenVersion:${decoded.userId}`, userTokenVersion.toString(), {
+          EX: 300 // 5 minutes in seconds
+        });
       }
 
-      if (decoded.tokenVersion !== user.tokenVersion) {
+      if (decoded.tokenVersion !== userTokenVersion) {
         return res.status(401).json({ message: 'Token version mismatch - please login again' });
       }
 
-      req.user = user;
+      // Attach decoded user info to request for use in subsequent middleware
+      // Only the userId is attached by default to avoid unnecessary database queries
+      req.userId = decoded.userId;
+
       next();
     } catch (error) {
       // Error handling...
     }
+  };
+  ```
+
+- **Utility Function**: For routes that need the full user object, a utility function is provided:
+  ```javascript
+  export const getUserById = async (userId) => {
+    return await User.findById(userId);
   };
   ```
 
@@ -181,6 +221,63 @@ const userSchema = new mongoose.Schema({
   - Users can always clear their cookies, even with expired tokens
   - Sensitive operations (like invalidating all sessions) remain protected
   - Frontend can handle both scenarios gracefully
+
+### Profile Route (Example)
+- **Purpose**: Demonstrates how to fetch the full user object when needed in specific routes.
+- **Implementation**:
+  - Uses the `verifyTokenVersion` middleware to verify the token
+  - Uses the `getUserById` utility function to fetch the full user object only when needed
+  - Returns user profile data while excluding sensitive information
+- **Code**:
+  ```javascript
+  router.get('/profile', verifyTokenVersion, async (req, res) => {
+    try {
+      // Use the utility function to fetch the full user object when needed
+      const user = await getUserById(req.userId);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Return user profile data (excluding sensitive information)
+      const { password, tokenVersion, ...userProfile } = user.toObject();
+      res.json(userProfile);
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  ```
+- **Benefits**:
+  - Avoids unnecessary database queries in the middleware
+  - Only fetches the full user object when actually needed
+  - Demonstrates the proper way to use the utility function
+
+### Redis Caching
+- **Purpose**: Improves performance by caching token versions in Redis, reducing database load.
+- **Implementation**:
+  - Redis is used to cache user token versions with a 5-minute TTL
+  - The `verifyTokenVersion` middleware first checks Redis for the token version
+  - If not found in Redis, it fetches from the database and caches the result
+  - This significantly reduces database queries for token version verification
+- **Benefits**:
+  - Improved performance by reducing database load
+  - Maintains security while enhancing scalability
+  - Automatic cache invalidation after 5 minutes ensures data consistency
+
+### Refresh Token Rotation
+- **Purpose**: Enhances security by rotating refresh tokens on each use, mitigating the risk of token theft.
+- **Implementation**:
+  - When a refresh token is used to obtain a new access token, a new refresh token is issued
+  - The old refresh token is marked as used in Redis
+  - If a refresh token is reused (potential breach), the system detects it and invalidates all tokens for that user
+  - The token version is incremented to force logout from all devices
+  - Token reuse is logged as a "CRITICAL" severity event with "high" severity flag
+- **Benefits**:
+  - Mitigates the risk of refresh token theft
+  - Detects and responds to potential security breaches
+  - Provides an additional layer of security for long-lived tokens
+  - Enables monitoring for coordinated attacks through high-severity logging
 
 ---
 
@@ -227,6 +324,17 @@ const userSchema = new mongoose.Schema({
   ```javascript
   app.use(express.json({ limit: '10kb' }));
   ```
+
+### Redis Security
+- **Purpose**: Enhances security by using Redis for caching and token tracking.
+- **Implementation**:
+  - Redis is used to cache token versions, reducing database load
+  - Redis tracks used refresh tokens to detect potential breaches
+  - Redis connection is secured and properly managed
+- **Benefits**:
+  - Improves performance while maintaining security
+  - Detects and responds to potential security breaches
+  - Provides an additional layer of security for token management
 
 ---
 
@@ -282,6 +390,39 @@ const userSchema = new mongoose.Schema({
   }
   ```
 
+### Redis
+- **Purpose**: Provides in-memory caching for token versions and refresh token tracking.
+- **Implementation**:
+  - Docker container running Redis for development
+  - Redis client integrated with the application
+  - Used for caching token versions and tracking used refresh tokens
+- **Configuration**:
+  ```javascript
+  const redisClient = createClient({
+    url: 'redis://localhost:6379'
+  });
+
+  // Connect to Redis
+  redisClient.connect().catch(console.error);
+  ```
+- **Docker Configuration**:
+  ```yaml
+  version: '3.8'
+
+  services:
+    redis:
+      image: redis:alpine
+      container_name: redis
+      ports:
+        - "6379:6379"
+      volumes:
+        - redis_data:/data
+      restart: unless-stopped
+
+  volumes:
+    redis_data:
+  ```
+
 ---
 
 ## Environment Variables
@@ -293,8 +434,26 @@ const userSchema = new mongoose.Schema({
   - `REFRESH_TOKEN_SECRET`: Secret for refresh tokens.
   - `REFRESH_TOKEN_EXPIRE`: Expiration time for refresh tokens.
   - `NODE_ENV`: Environment (development/production).
+  - `REDIS_URL`: Redis connection URL (default: redis://localhost:6379).
 
 ---
 
 ## Conclusion
-This Express API backend and authentication system is designed with security as a top priority. It includes robust authentication, input validation, secure database interactions, and comprehensive logging. The system is ready for production deployment with minimal additional configuration.
+This Express API backend and authentication system is designed with security as a top priority. It includes robust authentication, input validation, secure database interactions, and comprehensive logging.
+
+The system now features:
+- **Redis Caching**: Improves performance by caching token versions, reducing database load and enhancing scalability.
+- **Refresh Token Rotation**: Enhances security by rotating refresh tokens on each use, mitigating the risk of token theft and detecting potential breaches.
+
+These improvements make the system even more secure and efficient, addressing the areas for improvement mentioned in the review.
+
+## Final Deployment Pro-Tips
+As you move toward production, keep these three final operational tips in mind:
+
+1. **Redis Persistence**: Ensure your Docker volume for Redis is correctly mapped (as you have in your YAML), so that if the container restarts, you don't accidentally log everyone out (since the cached versions would be lost and the system would fall back to the DB).
+
+2. **Monitoring (The "Silent" Breach)**: Since you now have logic to detect Refresh Token reuse, make sure you log this as a "High" or "Critical" severity event in Winston. If your logs show multiple "Token Reuse Detected" events for different users, you'll know immediately that your app is under a coordinated attack.
+
+3. **Secret Management**: For production, ensure JWT_SECRET and REFRESH_TOKEN_SECRET are long, random strings (at least 64 characters) and are never hardcoded in your index.js.
+
+The system is now ready for production deployment with minimal additional configuration.

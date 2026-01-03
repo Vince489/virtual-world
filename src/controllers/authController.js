@@ -2,6 +2,15 @@ import { hash, verify, Algorithm } from '@node-rs/argon2';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import winston from 'winston';
+import { createClient } from 'redis';
+
+// Create Redis client for tracking used refresh tokens
+const redisClient = createClient({
+  url: 'redis://localhost:6379'
+});
+
+// Connect to Redis
+redisClient.connect().catch(console.error);
 
 const logger = winston.createLogger({
   level: 'info',
@@ -64,6 +73,15 @@ const generateRefreshToken = (userId, tokenVersion) => {
     process.env.REFRESH_TOKEN_SECRET,
     { expiresIn: process.env.REFRESH_TOKEN_EXPIRE }
   );
+};
+
+/**
+ * Utility function to fetch the full user object when needed
+ * @param {string} userId - The user ID
+ * @returns {Promise<Object>} The full user object
+ */
+export const getUserById = async (userId) => {
+  return await User.findById(userId);
 };
 
 export const signup = async (req, res) => {
@@ -173,6 +191,7 @@ export const login = async (req, res) => {
 
 /**
  * Refresh access token using refresh token
+ * Implements refresh token rotation for security
  */
 export const refreshToken = async (req, res) => {
   try {
@@ -185,6 +204,23 @@ export const refreshToken = async (req, res) => {
 
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+
+    // Check if this refresh token has been used before (potential breach)
+    const isTokenUsed = await redisClient.get(`usedRefreshToken:${refreshToken}`);
+    if (isTokenUsed) {
+      logger.error(`CRITICAL: Refresh token reuse detected for user: ${decoded.userId} - Potential security breach!`, { ip: req.ip, severity: 'high' });
+
+      // Increment token version to invalidate all tokens for this user
+      await User.findByIdAndUpdate(decoded.userId, { $inc: { tokenVersion: 1 } });
+
+      // Clear cookies
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+
+      return res.status(401).json({
+        message: 'Security alert: Potential token breach detected. Please login again.'
+      });
+    }
 
     // Find user in database
     const user = await User.findById(decoded.userId);
@@ -203,12 +239,30 @@ export const refreshToken = async (req, res) => {
     // Generate new access token
     const newAccessToken = generateAccessToken(user._id, user.tokenVersion);
 
+    // Generate new refresh token (rotation)
+    const newRefreshToken = generateRefreshToken(user._id, user.tokenVersion);
+
+    // Mark the old refresh token as used in Redis (with expiration matching the token's remaining lifetime)
+    const decodedRefreshToken = jwt.decode(refreshToken);
+    const remainingLifetime = decodedRefreshToken.exp - Math.floor(Date.now() / 1000);
+    await redisClient.set(`usedRefreshToken:${refreshToken}`, 'true', {
+      EX: Math.max(remainingLifetime, 0) // Use remaining lifetime or 0 if already expired
+    });
+
     // Set new access token cookie
     res.cookie('accessToken', newAccessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       maxAge: 60 * 60 * 1000 // 1 hour
+    });
+
+    // Set new refresh token cookie
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
     logger.info(`Access token refreshed for user: ${user.username}`, { ip: req.ip });
@@ -249,21 +303,21 @@ export const logout = async (req, res) => {
  */
 export const logoutAll = async (req, res) => {
   try {
-    // Get user from request (should be set by verifyTokenVersion middleware)
-    const user = req.user;
+    // Get user ID from request (should be set by verifyTokenVersion middleware)
+    const userId = req.userId;
 
-    if (!user) {
+    if (!userId) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
     // Increment token version
-    await User.findByIdAndUpdate(user._id, { $inc: { tokenVersion: 1 } });
+    await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
 
     // Clear cookies
     res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
 
-    logger.info(`User ${user.username} logged out from all devices`, { ip: req.ip });
+    logger.info(`User ${userId} logged out from all devices`, { ip: req.ip });
     res.json({ message: 'Logged out from all devices successfully' });
   } catch (error) {
     logger.error('Logout all error:', error);
