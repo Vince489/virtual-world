@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 
 const app = express();
 
@@ -17,28 +18,41 @@ const PORT = process.env.PORT;
 
 // Configure Winston logger
 const logger = winston.createLogger({
-  level: 'info',
+  level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
   format: winston.format.combine(
     winston.format.timestamp(),
     winston.format.json()
   ),
   transports: [
+    // Always log to the console (Railway captures this)
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'logs/combined.log' })
   ]
 });
+
+// Only add file logging if we are NOT in production
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.File({ filename: 'logs/error.log', level: 'error' }));
+  logger.add(new winston.transports.File({ filename: 'logs/combined.log' }));
+}
 
 // Configure Morgan for HTTP request logging
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const accessLogStream = fs.createWriteStream(
-  path.join(__dirname, 'logs/access.log'),
-  { flags: 'a' }
-);
 
-app.use(morgan('combined', { stream: accessLogStream }));
-app.use(morgan('dev')); // Log to console in development
+// Only log to file in development
+if (process.env.NODE_ENV !== 'production') {
+  const accessLogStream = fs.createWriteStream(
+    path.join(__dirname, 'logs/access.log'),
+    { flags: 'a' }
+  );
+  app.use(morgan('combined', { stream: accessLogStream }));
+}
+
+// Log to console in development
+app.use(morgan('dev'));
+
+// Cookie parser middleware
+app.use(cookieParser());
 
 // Security middleware
 app.use(helmet({

@@ -26,10 +26,23 @@ export const verifyTokenVersion = async (req, res, next) => {
     // Decode token to get userId and tokenVersion
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Check Redis cache first
-    const cachedTokenVersion = await redisClient.get(`tokenVersion:${decoded.userId}`);
-
+    // Check Redis cache first with circuit breaker pattern
     let userTokenVersion;
+    let cachedTokenVersion;
+
+    try {
+      cachedTokenVersion = await redisClient.get(`tokenVersion:${decoded.userId}`);
+    } catch (redisError) {
+      console.warn('Redis Down - Falling back to MongoDB');
+      // Fall back to database if Redis is down
+      const user = await User.findById(decoded.userId).select('tokenVersion');
+
+      if (!user) {
+        return res.status(401).json({ message: 'User not found' });
+      }
+
+      userTokenVersion = user.tokenVersion;
+    }
 
     if (cachedTokenVersion) {
       // Use cached token version
@@ -45,9 +58,13 @@ export const verifyTokenVersion = async (req, res, next) => {
       userTokenVersion = user.tokenVersion;
 
       // Cache the token version for 5 minutes
-      await redisClient.set(`tokenVersion:${decoded.userId}`, userTokenVersion.toString(), {
-        EX: 300 // 5 minutes in seconds
-      });
+      try {
+        await redisClient.set(`tokenVersion:${decoded.userId}`, userTokenVersion.toString(), {
+          EX: 300 // 5 minutes in seconds
+        });
+      } catch (redisError) {
+        console.warn('Redis Down - Could not cache token version');
+      }
     }
 
     // Check if token version matches

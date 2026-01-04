@@ -1,0 +1,4 @@
+{"level":"debug","message":"This is a debug message","timestamp":"2026-01-03T21:38:24.270Z"}
+{"level":"info","message":"This is an info message","timestamp":"2026-01-03T21:38:24.272Z"}
+{"level":"warn","message":"This is a warning message","timestamp":"2026-01-03T21:38:24.272Z"}
+{"level":"error","message":"This is an error message","timestamp":"2026-01-03T21:38:24.272Z"}

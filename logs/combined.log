@@ -1,0 +1,36 @@
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-03T20:55:37.180Z"}
+{"level":"info","message":"POST /auth/login - IP: ::ffff:127.0.0.1","timestamp":"2026-01-03T20:55:55.416Z"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"Successful login for user: bob3","timestamp":"2026-01-03T20:55:55.532Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:14:11.777Z"}
+{"ip":"::1","level":"warn","message":"Failed login attempt for user: testuser","timestamp":"2026-01-03T22:14:11.906Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:15:09.008Z"}
+{"code":40,"errorLabelSet":{},"errorResponse":{"code":40,"errmsg":"Updating the path 'failedLoginAttempts' would create a conflict at 'failedLoginAttempts'","index":0},"index":0,"level":"error","message":"Login error: Updating the path 'failedLoginAttempts' would create a conflict at 'failedLoginAttempts'","stack":"MongoServerError: Updating the path 'failedLoginAttempts' would create a conflict at 'failedLoginAttempts'\n    at UpdateOneOperation.handleOk (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\mongodb\\lib\\operations\\update.js:70:19)\n    at tryOperation (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\mongodb\\lib\\operations\\execute_operation.js:216:34)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async executeOperation (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\mongodb\\lib\\operations\\execute_operation.js:80:16)\n    at async Collection.updateOne (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\mongodb\\lib\\collection.js:238:16)\n    at async model.Query.exec (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\mongoose\\lib\\query.js:4627:63)\n    at async login (file:///C:/Users/Vince/Documents/virtual-world/src/controllers/authController.js:170:7)","timestamp":"2026-01-03T22:15:09.134Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:16:41.992Z"}
+{"ip":"::1","level":"info","message":"Successful login for user: testuser","timestamp":"2026-01-03T22:16:42.109Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:16:42.115Z"}
+{"level":"error","message":"Refresh token error: Cannot read properties of undefined (reading 'refreshToken')","stack":"TypeError: Cannot read properties of undefined (reading 'refreshToken')\n    at refreshToken (file:///C:/Users/Vince/Documents/virtual-world/src/controllers/authController.js:214:38)\n    at Layer.handleRequest (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\lib\\layer.js:152:17)\n    at next (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\lib\\route.js:157:13)\n    at Route.dispatch (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\lib\\route.js:117:3)\n    at handle (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\index.js:435:11)\n    at Layer.handleRequest (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\lib\\layer.js:152:17)\n    at C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\index.js:295:15\n    at processParams (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\index.js:582:12)\n    at next (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\index.js:291:5)\n    at router.handle (C:\\Users\\Vince\\Documents\\virtual-world\\node_modules\\router\\index.js:186:3)","timestamp":"2026-01-03T22:16:42.116Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:17:09.667Z"}
+{"ip":"::1","level":"info","message":"Successful login for user: testuser","timestamp":"2026-01-03T22:17:09.780Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:17:09.785Z"}
+{"ip":"::1","level":"warn","message":"Refresh token attempt with no token provided","timestamp":"2026-01-03T22:17:09.786Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:18:02.312Z"}
+{"ip":"::1","level":"info","message":"Successful login for user: testuser","timestamp":"2026-01-03T22:18:02.431Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:18:02.437Z"}
+{"ip":"::1","level":"warn","message":"Refresh token attempt with no token provided","timestamp":"2026-01-03T22:18:02.437Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:21:01.810Z"}
+{"ip":"::1","level":"info","message":"Successful login for user: testuser","timestamp":"2026-01-03T22:21:01.922Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:21:01.928Z"}
+{"ip":"::1","level":"warn","message":"Refresh token attempt with no token provided","timestamp":"2026-01-03T22:21:01.929Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:21:53.581Z"}
+{"ip":"::1","level":"info","message":"Successful login for user: testuser","timestamp":"2026-01-03T22:21:53.706Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:21:53.712Z"}
+{"ip":"::1","level":"warn","message":"Refresh token attempt with no token provided","timestamp":"2026-01-03T22:21:53.712Z"}
+{"level":"info","message":"POST /auth/login - IP: ::1","timestamp":"2026-01-03T22:24:15.565Z"}
+{"ip":"::1","level":"info","message":"Successful login for user: testuser","timestamp":"2026-01-03T22:24:15.681Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:24:15.687Z"}
+{"ip":"::1","level":"info","message":"Access token refreshed for user: testuser","timestamp":"2026-01-03T22:24:15.701Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:24:15.706Z"}
+{"ip":"::1","level":"warn","message":"Refresh token reused within leeway window for user: 694effab7480129500ad3d71","timestamp":"2026-01-03T22:24:15.708Z"}
+{"ip":"::1","level":"info","message":"Access token refreshed for user: testuser","timestamp":"2026-01-03T22:24:15.712Z"}
+{"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:24:46.733Z"}
+{"ip":"::1","level":"error","message":"CRITICAL: Refresh token reuse detected for user: 694effab7480129500ad3d71 - Potential security breach!","severity":"high","timestamp":"2026-01-03T22:24:46.736Z"}

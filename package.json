@@ -6,7 +6,12 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index",
-    "start": "node src/index"
+    "start": "node src/index",
+    "admin:seed": "node src/scripts/seed-admin.js",
+    "admin:clear-cache": "node src/scripts/clear-cache.js",
+    "admin:migrate-data": "node src/scripts/migrate-data.js",
+    "test:double-tap": "node src/scripts/test-double-tap.js",
+    "seed:test-user": "node src/scripts/seed-test-user.js"
   },
   "keywords": [],
   "author": "",
@@ -14,6 +19,7 @@
   "type": "module",
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dompurify": "^3.3.1",
     "dotenv": "^17.2.3",

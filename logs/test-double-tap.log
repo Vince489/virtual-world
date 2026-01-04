@@ -1,0 +1,58 @@
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:11:34.736Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:11:34.737Z"}
+{"level":"error","message":"Error during Double-Tap test: require is not defined","stack":"ReferenceError: require is not defined\n    at file:///C:/Users/Vince/Documents/virtual-world/src/scripts/test-double-tap.js:42:17\n    at new Promise (<anonymous>)\n    at makeRequest (file:///C:/Users/Vince/Documents/virtual-world/src/scripts/test-double-tap.js:28:10)\n    at testDoubleTap (file:///C:/Users/Vince/Documents/virtual-world/src/scripts/test-double-tap.js:100:33)\n    at file:///C:/Users/Vince/Documents/virtual-world/src/scripts/test-double-tap.js:191:1\n    at ModuleJob.run (node:internal/modules/esm/module_job:413:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)","timestamp":"2026-01-03T22:11:34.738Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:14:11.762Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:14:11.764Z"}
+{"level":"error","message":"Login failed: Invalid credentials","timestamp":"2026-01-03T22:14:11.909Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:15:08.995Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:15:08.997Z"}
+{"level":"error","message":"Login failed: Internal server error","timestamp":"2026-01-03T22:15:09.138Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:16:41.978Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:16:41.980Z"}
+{"level":"info","message":"Login successful","timestamp":"2026-01-03T22:16:42.113Z"}
+{"level":"info","message":"Refresh token obtained","timestamp":"2026-01-03T22:16:42.114Z"}
+{"level":"info","message":"Step 2: Making first call to /auth/refresh-token...","timestamp":"2026-01-03T22:16:42.114Z"}
+{"level":"error","message":"First refresh token call failed: Internal server error","timestamp":"2026-01-03T22:16:42.117Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:17:09.655Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:17:09.657Z"}
+{"level":"info","message":"Login successful","timestamp":"2026-01-03T22:17:09.783Z"}
+{"level":"info","message":"Refresh token obtained","timestamp":"2026-01-03T22:17:09.784Z"}
+{"level":"info","message":"Step 2: Making first call to /auth/refresh-token...","timestamp":"2026-01-03T22:17:09.784Z"}
+{"level":"error","message":"First refresh token call failed: No refresh token provided","timestamp":"2026-01-03T22:17:09.787Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:18:02.298Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:18:02.300Z"}
+{"level":"info","message":"Login successful","timestamp":"2026-01-03T22:18:02.435Z"}
+{"level":"info","message":"Refresh token obtained","timestamp":"2026-01-03T22:18:02.435Z"}
+{"level":"info","message":"Step 2: Making first call to /auth/refresh-token...","timestamp":"2026-01-03T22:18:02.435Z"}
+{"level":"error","message":"First refresh token call failed: No refresh token provided","timestamp":"2026-01-03T22:18:02.439Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:21:01.797Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:21:01.799Z"}
+{"level":"info","message":"Login successful","timestamp":"2026-01-03T22:21:01.926Z"}
+{"level":"info","message":"Refresh token obtained","timestamp":"2026-01-03T22:21:01.926Z"}
+{"level":"info","message":"Step 2: Making first call to /auth/refresh-token...","timestamp":"2026-01-03T22:21:01.926Z"}
+{"level":"error","message":"First refresh token call failed: No refresh token provided","timestamp":"2026-01-03T22:21:01.929Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:21:53.567Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:21:53.569Z"}
+{"level":"info","message":"Login successful","timestamp":"2026-01-03T22:21:53.709Z"}
+{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTRlZmZhYjc0ODAxMjk1MDBhZDNkNzEiLCJ0b2tlblZlcnNpb24iOjAsImlhdCI6MTc2NzQ3ODkxMywiZXhwIjoxNzY3NDgyNTEzfQ.hOMKoHnotOvNyd4AFBJuunTFwBt9_2pa2x7MfpwYEHY","level":"info","message":"Cookies received from login:","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTRlZmZhYjc0ODAxMjk1MDBhZDNkNzEiLCJ0b2tlblZlcnNpb24iOjAsImlhdCI6MTc2NzQ3ODkxMywiZXhwIjoxNzY4MDgzNzEzfQ.Pu6FCu_rJ8i1qdhvRt8J8Z7OxVZA3hutDM44m5BaP_o","timestamp":"2026-01-03T22:21:53.710Z"}
+{"level":"info","message":"Refresh token obtained","timestamp":"2026-01-03T22:21:53.710Z"}
+{"level":"info","message":"Step 2: Making first call to /auth/refresh-token...","timestamp":"2026-01-03T22:21:53.711Z"}
+{"level":"error","message":"First refresh token call failed: No refresh token provided","timestamp":"2026-01-03T22:21:53.713Z"}
+{"level":"info","message":"Starting Double-Tap test...","timestamp":"2026-01-03T22:24:15.554Z"}
+{"level":"info","message":"Step 1: Logging in to get a valid refresh token...","timestamp":"2026-01-03T22:24:15.556Z"}
+{"level":"info","message":"Login successful","timestamp":"2026-01-03T22:24:15.685Z"}
+{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTRlZmZhYjc0ODAxMjk1MDBhZDNkNzEiLCJ0b2tlblZlcnNpb24iOjAsImlhdCI6MTc2NzQ3OTA1NSwiZXhwIjoxNzY3NDgyNjU1fQ.O5HKYgTumofNqkNXdPd9OYsoGND0MGpR1VjQkEGtTEY","level":"info","message":"Cookies received from login:","refreshToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTRlZmZhYjc0ODAxMjk1MDBhZDNkNzEiLCJ0b2tlblZlcnNpb24iOjAsImlhdCI6MTc2NzQ3OTA1NSwiZXhwIjoxNzY4MDgzODU1fQ.NVdsaaN67uDVYiGIwRAKj2VBhzTt7nJ9sKeYUOpkeuY","timestamp":"2026-01-03T22:24:15.685Z"}
+{"level":"info","message":"Refresh token obtained","timestamp":"2026-01-03T22:24:15.686Z"}
+{"level":"info","message":"Step 2: Making first call to /auth/refresh-token...","timestamp":"2026-01-03T22:24:15.686Z"}
+{"level":"info","message":"First refresh token call successful","timestamp":"2026-01-03T22:24:15.704Z"}
+{"level":"info","message":"Step 3: Making second call to /auth/refresh-token with the same token...","timestamp":"2026-01-03T22:24:15.705Z"}
+{"level":"info","message":"SUCCESS: Second refresh token call within leeway window was successful","timestamp":"2026-01-03T22:24:15.714Z"}
+{"level":"info","message":"This indicates the leeway window is working correctly","timestamp":"2026-01-03T22:24:15.714Z"}
+{"level":"info","message":"Step 4: Checking Redis for leeway window logs...","timestamp":"2026-01-03T22:24:15.715Z"}
+{"level":"info","message":"SUCCESS: Found leeway window marker in Redis","timestamp":"2026-01-03T22:24:15.717Z"}
+{"level":"info","message":"This confirms the token was reused within the leeway window","timestamp":"2026-01-03T22:24:15.718Z"}
+{"level":"info","message":"Step 5: Waiting for leeway window to expire (30 seconds)...","timestamp":"2026-01-03T22:24:15.718Z"}
+{"level":"info","message":"Making third call to /auth/refresh-token with the same token (after leeway window)...","timestamp":"2026-01-03T22:24:46.730Z"}
+{"level":"info","message":"SUCCESS: Third refresh token call after leeway window was rejected with 401","timestamp":"2026-01-03T22:24:46.740Z"}
+{"level":"info","message":"This confirms the leeway window protection is working correctly","timestamp":"2026-01-03T22:24:46.740Z"}
+{"level":"info","message":"Double-Tap test completed","timestamp":"2026-01-03T22:24:46.740Z"}

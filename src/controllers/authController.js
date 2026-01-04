@@ -117,7 +117,15 @@ export const signup = async (req, res) => {
 
     await newUser.save();
 
-    res.status(201).json({ message: 'User created successfully' });
+    res.status(201).json({
+      message: 'User created successfully',
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email
+        // Other non-sensitive fields
+      }
+    });
   } catch (error) {
     logger.error('Signup error:', error);
     if (error.code === 11000) { // Duplicate key error
@@ -182,7 +190,15 @@ export const login = async (req, res) => {
     });
 
     logger.info(`Successful login for user: ${username}`, { ip: req.ip });
-    res.json({ message: 'Login successful' });
+    res.json({
+      message: 'Login successful',
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email
+        // Other non-sensitive fields
+      }
+    });
   } catch (error) {
     logger.error('Login error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -195,7 +211,7 @@ export const login = async (req, res) => {
  */
 export const refreshToken = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    const refreshToken = req.cookies ? req.cookies.refreshToken : null;
 
     if (!refreshToken) {
       logger.warn('Refresh token attempt with no token provided', { ip: req.ip });
@@ -206,20 +222,31 @@ export const refreshToken = async (req, res) => {
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
 
     // Check if this refresh token has been used before (potential breach)
-    const isTokenUsed = await redisClient.get(`usedRefreshToken:${refreshToken}`);
+    const usedTokenKey = `usedRefreshToken:${refreshToken}`;
+    const isTokenUsed = await redisClient.get(usedTokenKey);
+
     if (isTokenUsed) {
-      logger.error(`CRITICAL: Refresh token reuse detected for user: ${decoded.userId} - Potential security breach!`, { ip: req.ip, severity: 'high' });
+      // Check if this is a recent reuse (within 30 seconds)
+      const isRecentReuse = await redisClient.get(`${usedTokenKey}:leeway`);
 
-      // Increment token version to invalidate all tokens for this user
-      await User.findByIdAndUpdate(decoded.userId, { $inc: { tokenVersion: 1 } });
+      if (isRecentReuse) {
+        // Allow reuse within 30-second leeway window
+        logger.warn(`Refresh token reused within leeway window for user: ${decoded.userId}`, { ip: req.ip });
+      } else {
+        // Outside leeway window - potential breach
+        logger.error(`CRITICAL: Refresh token reuse detected for user: ${decoded.userId} - Potential security breach!`, { ip: req.ip, severity: 'high' });
 
-      // Clear cookies
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
+        // Increment token version to invalidate all tokens for this user
+        await User.findByIdAndUpdate(decoded.userId, { $inc: { tokenVersion: 1 } });
 
-      return res.status(401).json({
-        message: 'Security alert: Potential token breach detected. Please login again.'
-      });
+        // Clear cookies
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+
+        return res.status(401).json({
+          message: 'Security alert: Potential token breach detected. Please login again.'
+        });
+      }
     }
 
     // Find user in database
@@ -245,8 +272,15 @@ export const refreshToken = async (req, res) => {
     // Mark the old refresh token as used in Redis (with expiration matching the token's remaining lifetime)
     const decodedRefreshToken = jwt.decode(refreshToken);
     const remainingLifetime = decodedRefreshToken.exp - Math.floor(Date.now() / 1000);
+
+    // Set the token as used
     await redisClient.set(`usedRefreshToken:${refreshToken}`, 'true', {
       EX: Math.max(remainingLifetime, 0) // Use remaining lifetime or 0 if already expired
+    });
+
+    // Set leeway window for 30 seconds
+    await redisClient.set(`${usedTokenKey}:leeway`, 'true', {
+      EX: 30 // 30-second leeway window
     });
 
     // Set new access token cookie
@@ -313,6 +347,9 @@ export const logoutAll = async (req, res) => {
     // Increment token version
     await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
 
+    // Delete Redis cache for token version
+    await redisClient.del(`tokenVersion:${userId}`);
+
     // Clear cookies
     res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
@@ -321,6 +358,68 @@ export const logoutAll = async (req, res) => {
     res.json({ message: 'Logged out from all devices successfully' });
   } catch (error) {
     logger.error('Logout all error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * Update user password with cache invalidation
+ */
+export const updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    if (!currentPassword || !newPassword) {
+      logger.warn('Password update attempt with missing fields', { userId, ip: req.ip });
+      return res.status(400).json({ message: 'Current password and new password are required' });
+    }
+
+    // Validate new password strength
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      logger.warn('Password update attempt with weak new password', { userId, ip: req.ip });
+      return res.status(400).json({ message: passwordError });
+    }
+
+    // Get user from database
+    const user = await User.findById(userId);
+    if (!user) {
+      logger.warn(`Password update attempt for non-existent user: ${userId}`, { ip: req.ip });
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify current password
+    const isValidPassword = await verify(user.password, currentPassword, argon2Options);
+    if (!isValidPassword) {
+      logger.warn(`Invalid current password for user: ${userId}`, { ip: req.ip });
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    // Hash new password
+    const hashedPassword = await hash(newPassword, argon2Options);
+
+    // Update password and increment token version
+    await User.findByIdAndUpdate(userId, {
+      password: hashedPassword,
+      $inc: { tokenVersion: 1 }
+    });
+
+    // Delete Redis cache for token version
+    await redisClient.del(`tokenVersion:${userId}`);
+
+    // Clear cookies
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    logger.info(`Password updated successfully for user: ${userId}`, { ip: req.ip });
+    res.json({ message: 'Password updated successfully. Please login again.' });
+  } catch (error) {
+    logger.error('Password update error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
