@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import winston from 'winston';
 import { createClient } from 'redis';
+import crypto from 'crypto';
+import { sendPasswordResetEmail } from '../config/emailService.js';
 
 // Create Redis client for tracking used refresh tokens
 const redisClient = createClient({
@@ -30,6 +32,11 @@ const argon2Options = {
   timeCost: 3,       // 3 iterations
   parallelism: 4,    // 4 threads
   algorithm: Algorithm.Argon2id,    // Use the id variant
+};
+
+// Generate a secure random token for password reset
+const generateResetToken = () => {
+  return crypto.randomBytes(32).toString('hex');
 };
 
 // Password strength validation
@@ -420,6 +427,116 @@ export const updatePassword = async (req, res) => {
     res.json({ message: 'Password updated successfully. Please login again.' });
   } catch (error) {
     logger.error('Password update error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * Request password reset - generate and send reset token
+ */
+export const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      logger.warn('Password reset request with missing email', { ip: req.ip });
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      logger.info(`Password reset requested for non-existent email: ${email}`, { ip: req.ip });
+      return res.status(200).json({ message: 'If this email exists in our system, a password reset link has been sent' });
+    }
+
+    // Generate reset token
+    const resetToken = generateResetToken();
+    const resetTokenExpires = new Date(Date.now() + 3600000); // 1 hour from now
+
+    // Update user with reset token
+    await User.findByIdAndUpdate(user._id, {
+      resetToken,
+      resetTokenExpires
+    });
+
+    // Generate reset URL
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+
+    // Send email with reset link
+    const emailSent = await sendPasswordResetEmail(user.email, resetUrl);
+
+    if (!emailSent) {
+      logger.error(`Failed to send password reset email to user: ${user.username}`, { ip: req.ip });
+      // Still return success to prevent email enumeration
+      res.status(200).json({
+        message: 'If this email exists in our system, a password reset link has been sent'
+      });
+      return;
+    }
+
+    logger.info(`Password reset email sent to user: ${user.username}`, { ip: req.ip });
+
+    res.status(200).json({
+      message: 'If this email exists in our system, a password reset link has been sent',
+      // In development, return the token for testing purposes
+      resetToken: process.env.NODE_ENV === 'development' ? resetToken : undefined
+    });
+  } catch (error) {
+    logger.error('Password reset request error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+/**
+ * Reset password - validate token and update password
+ */
+export const resetPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      logger.warn('Password reset attempt with missing fields', { ip: req.ip });
+      return res.status(400).json({ message: 'Token and new password are required' });
+    }
+
+    // Validate new password strength
+    const passwordError = validatePasswordStrength(newPassword);
+    if (passwordError) {
+      logger.warn('Password reset attempt with weak new password', { ip: req.ip });
+      return res.status(400).json({ message: passwordError });
+    }
+
+    // Find user by reset token
+    const user = await User.findOne({
+      resetToken: token,
+      resetTokenExpires: { $gt: Date.now() } // Token not expired
+    });
+
+    if (!user) {
+      logger.warn('Password reset attempt with invalid or expired token', { ip: req.ip });
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
+
+    // Hash new password
+    const hashedPassword = await hash(newPassword, argon2Options);
+
+    // Update password, clear reset token, and increment token version
+    await User.findByIdAndUpdate(user._id, {
+      password: hashedPassword,
+      resetToken: null,
+      resetTokenExpires: null,
+      $inc: { tokenVersion: 1 }
+    });
+
+    // Delete Redis cache for token version
+    await redisClient.del(`tokenVersion:${user._id}`);
+
+    logger.info(`Password reset successfully for user: ${user.username}`, { ip: req.ip });
+    res.json({ message: 'Password reset successfully. Please login with your new password.' });
+  } catch (error) {
+    logger.error('Password reset error:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };

@@ -34,3 +34,7 @@
 {"ip":"::1","level":"info","message":"Access token refreshed for user: testuser","timestamp":"2026-01-03T22:24:15.712Z"}
 {"level":"info","message":"POST /auth/refresh-token - IP: ::1","timestamp":"2026-01-03T22:24:46.733Z"}
 {"ip":"::1","level":"error","message":"CRITICAL: Refresh token reuse detected for user: 694effab7480129500ad3d71 - Potential security breach!","severity":"high","timestamp":"2026-01-03T22:24:46.736Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T03:15:25.784Z"}
+{"level":"info","message":"POST /auth/forgot-password - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T03:25:08.662Z"}
+{"accepted":["vincentcornelius489@gmail.com"],"level":"info","message":"Password reset email sent to vincentcornelius489@gmail.com","messageId":"<6e0ef655-440c-8283-9204-7810f8249786@virtron.cc>","rejected":[],"timestamp":"2026-01-04T03:25:09.976Z"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"Password reset email sent to user: vince","timestamp":"2026-01-04T03:25:09.977Z"}

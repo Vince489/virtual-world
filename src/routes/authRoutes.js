@@ -1,6 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { signup, login, refreshToken, logout, logoutAll, getUserById } from '../controllers/authController.js';
+import { signup, login, refreshToken, logout, logoutAll, getUserById, requestPasswordReset, resetPassword } from '../controllers/authController.js';
 import { verifyTokenVersion } from '../middleware/verifyTokenVersion.js';
 
 const router = express.Router();
@@ -17,6 +17,8 @@ router.post('/signup', authLimiter, signup);
 router.post('/login', authLimiter, login);
 router.post('/refresh-token', refreshToken);
 router.post('/logout', logout); // Public logout for cookie clearing
+router.post('/forgot-password', authLimiter, requestPasswordReset);
+router.post('/reset-password', authLimiter, resetPassword);
 
 // Protected routes - require token version verification
 router.post('/logout-all', verifyTokenVersion, logoutAll);

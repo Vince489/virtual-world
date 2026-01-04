@@ -16,3 +16,5 @@
 ::1 - - [03/Jan/2026:22:24:15 +0000] "POST /auth/refresh-token HTTP/1.1" 200 49 "-" "-"
 ::1 - - [03/Jan/2026:22:24:15 +0000] "POST /auth/refresh-token HTTP/1.1" 200 49 "-" "-"
 ::1 - - [03/Jan/2026:22:24:46 +0000] "POST /auth/refresh-token HTTP/1.1" 401 82 "-" "-"
+::ffff:127.0.0.1 - - [04/Jan/2026:03:15:25 +0000] "POST /auth/signup HTTP/1.1" 201 139 "-" "vscode-restclient"
+::ffff:127.0.0.1 - - [04/Jan/2026:03:25:09 +0000] "POST /auth/forgot-password HTTP/1.1" 200 165 "-" "vscode-restclient"
