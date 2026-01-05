@@ -16,15 +16,27 @@ redisClient.connect().catch(console.error);
  */
 export const verifyTokenVersion = async (req, res, next) => {
   try {
-    // Get token from cookies
-    const token = req.cookies.accessToken;
+// Get token from cookies or Authorization header
+    let token = req.cookies.accessToken;
+
+    // Check for Authorization header if token not found in cookies
+    if (!token && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      console.log('Authorization Header:', authHeader);
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+        console.log('Extracted Token:', token);
+      }
+    }
 
     if (!token) {
+      console.log('No token found in cookies or Authorization header');
       return res.status(401).json({ message: 'No token provided' });
     }
 
     // Decode token to get userId and tokenVersion
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Decoded Token:', decoded);
 
     // Check Redis cache first with circuit breaker pattern
     let userTokenVersion;
@@ -32,10 +44,12 @@ export const verifyTokenVersion = async (req, res, next) => {
 
     try {
       cachedTokenVersion = await redisClient.get(`tokenVersion:${decoded.userId}`);
+      console.log('Cached Token Version:', cachedTokenVersion);
     } catch (redisError) {
       console.warn('Redis Down - Falling back to MongoDB');
       // Fall back to database if Redis is down
       const user = await User.findById(decoded.userId).select('tokenVersion');
+      console.log('User from DB (Redis Down):', user);
 
       if (!user) {
         return res.status(401).json({ message: 'User not found' });
@@ -47,15 +61,18 @@ export const verifyTokenVersion = async (req, res, next) => {
     if (cachedTokenVersion) {
       // Use cached token version
       userTokenVersion = parseInt(cachedTokenVersion);
+      console.log('Using Cached Token Version:', userTokenVersion);
     } else {
       // Fetch from database if not in cache
       const user = await User.findById(decoded.userId).select('tokenVersion');
+      console.log('User from DB:', user);
 
       if (!user) {
         return res.status(401).json({ message: 'User not found' });
       }
 
       userTokenVersion = user.tokenVersion;
+      console.log('Using DB Token Version:', userTokenVersion);
 
       // Cache the token version for 5 minutes
       try {

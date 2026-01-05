@@ -1,5 +1,5 @@
 import express from 'express';
-import { signup, login, refreshToken, logout, logoutAll, getUserById, requestPasswordReset, resetPassword } from '../controllers/authController.js';
+import { signup, login, refreshToken, logout, logoutAll, getUserById, requestPasswordReset, resetPassword, updateEmail } from '../controllers/authController.js';
 import { verifyTokenVersion } from '../middleware/verifyTokenVersion.js';
 
 const router = express.Router();
@@ -14,6 +14,7 @@ router.post('/reset-password', resetPassword);
 
 // Protected routes - require token version verification
 router.post('/logout-all', verifyTokenVersion, logoutAll);
+router.post('/update-email', verifyTokenVersion, updateEmail);
 
 // Example route that needs the full user object
 router.get('/profile', verifyTokenVersion, async (req, res) => {

@@ -581,3 +581,66 @@ export const resetPassword = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+/**
+ * Update user email with validation and security checks
+ */
+export const updateEmail = async (req, res) => {
+  try {
+    const { currentPassword, newEmail } = req.body;
+    const userId = req.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
+    if (!currentPassword || !newEmail) {
+      logger.warn('Email update attempt with missing fields', { userId, ip: req.ip });
+      return res.status(400).json({ message: 'Current password and new email are required' });
+    }
+
+    // Validate new email format
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+    if (!emailRegex.test(newEmail)) {
+      logger.warn('Email update attempt with invalid email format', { userId, ip: req.ip });
+      return res.status(400).json({ message: 'Please enter a valid email' });
+    }
+
+    // Get user from database
+    const user = await User.findById(userId);
+    if (!user) {
+      logger.warn(`Email update attempt for non-existent user: ${userId}`, { ip: req.ip });
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Verify current password
+    const isValidPassword = await verifyPassword(user.password, currentPassword);
+    if (!isValidPassword) {
+      logger.warn(`Invalid current password for user: ${userId}`, { ip: req.ip });
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    // Check if new email is already in use
+    const existingUserWithEmail = await User.findOne({ email: newEmail });
+    if (existingUserWithEmail && existingUserWithEmail._id.toString() !== userId) {
+      logger.warn(`Email update attempt with already used email: ${maskEmail(newEmail)}`, { userId, ip: req.ip });
+      return res.status(409).json({ message: 'Email is already in use' });
+    }
+
+    // Update email
+    await User.findByIdAndUpdate(userId, { email: newEmail });
+
+    logger.info(`Email updated successfully for user: ${userId}`, { ip: req.ip });
+    res.json({
+      message: 'Email updated successfully',
+      user: {
+        id: user._id,
+        username: user.username,
+        email: newEmail
+      }
+    });
+  } catch (error) {
+    logger.error('Email update error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};

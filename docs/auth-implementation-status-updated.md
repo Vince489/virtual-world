@@ -140,6 +140,7 @@ This document addresses the review of the authentication controller, highlightin
 | Token Blacklisting     | ✅ Optional  | Current versioning sufficient          |
 | Leeway Token TTL       | ✅ Excellent | Proper 30-second TTL implemented       |
 | Proxy Configuration    | ✅ Excellent | Trust proxy enabled for accurate IP tracking |
+| Email Update           | ✅ Implemented | Secure email update with password verification |
 
 ---
 
@@ -158,6 +159,7 @@ This document addresses the review of the authentication controller, highlightin
   - Concurrent signup attempts
   - Token rotation with leeway
   - Session invalidation
+  - Email update functionality
 
 ### Phase 3: Advanced Features (Optional)
 - [ ] Session collection for multi-device support

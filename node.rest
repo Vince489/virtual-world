@@ -1,26 +1,30 @@
+# 1. Sign up a new user
 POST http://localhost:3080/auth/signup
 Content-Type: application/json
 
 {
-    "username": "Robs2",
-    "email": "robs2@gmail.com",
-    "password": "1234qwQW!"
+    "username": "testuser3",
+    "email": "test3@example.com",
+    "password": "Test1234!"
 }
 
 ###
+# 2. Log in to get a token
 POST http://localhost:3080/auth/login
 Content-Type: application/json
 
 {
-    "username": "Robs2",
-    "email": "robs2@gmail.com",
-    "password": "1234qwQW!"
+    "username": "testuser3",
+    "password": "Test1234!"
 }
 
 ###
-POST http://localhost:3080/auth/forgot-password
+# 3. Update the email using the access token as a Bearer token
+POST http://localhost:3080/auth/update-email
 Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OTVjMDYwNzM5MDlkMDE4YWE2MTcxMzEiLCJ0b2tlblZlcnNpb24iOjAsImlhdCI6MTc2NzY0MDAxOSwiZXhwIjoxNzY3NjQzNjE5fQ.AH8pA7Et7CWXukwmKyyX2Vpfe5BApDhxYhh3o0ydqOg
 
 {
-    "email": "vincentcornelius489@gmail.com"
+    "currentPassword": "Test1234!",
+    "newEmail": "newemail3@example.com"
 }
