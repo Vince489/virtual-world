@@ -18,6 +18,10 @@ import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
+// CRITICAL: Trust the reverse proxy headers (X-Forwarded-For)
+// This ensures req.ip represents the actual user, not the load balancer.
+app.set('trust proxy', 1);
+
 // Validate environment variables
 validateEnv();
 

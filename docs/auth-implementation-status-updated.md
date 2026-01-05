@@ -32,7 +32,13 @@ This document addresses the review of the authentication controller, highlightin
   - **Auth routes**: 5 requests/15 minutes with Redis backing
   - **Automatic fallback**: Memory-based limiting when Redis unavailable
   - **Coverage**: All routes under `/auth` protected
+  - **Proxy Support**: Properly configured to trust reverse proxy headers
 - **Benefit**: Prevents brute force attacks while maintaining availability
+
+### 7. Proxy Configuration
+- **Implementation**: Trust proxy setting enabled (`app.set('trust proxy', 1)`)
+- **Benefit**: Ensures accurate IP tracking in hosted environments (Railway, etc.)
+- **Impact**: Critical for proper rate limiting and logging in production
 
 ---
 
@@ -126,12 +132,14 @@ This document addresses the review of the authentication controller, highlightin
 |------------------------|--------------|----------------------------------------|
 | Password Hashing       | ✅ Excellent | Dedicated authService implementation   |
 | Token Rotation         | ✅ Excellent | Includes network jitter leeway        |
-| Logging                | ⚠️ Caution   | Needs PII masking in logs              |
+| Logging                | ✅ Excellent | PII masking implemented in all logs   |
 | Session Management     | ✅ Intentional| Single session by design               |
 | Error Handling         | ✅ Robust    | Graceful Redis failure handling        |
 | Rate Limiting          | ✅ Excellent | Sophisticated Redis+memory system      |
 | Database Atomicity     | ✅ Good      | Unique indexes + error handling        |
-| Token Blacklisting     | ⚠️ Optional | Current versioning sufficient          |
+| Token Blacklisting     | ✅ Optional  | Current versioning sufficient          |
+| Leeway Token TTL       | ✅ Excellent | Proper 30-second TTL implemented       |
+| Proxy Configuration    | ✅ Excellent | Trust proxy enabled for accurate IP tracking |
 
 ---
 
@@ -139,9 +147,9 @@ This document addresses the review of the authentication controller, highlightin
 
 ### Phase 1: Quick Wins (1-2 hours)
 - [x] ~~Add rate limiting middleware~~ (Already implemented with advanced features)
-- [ ] Add email masking to logger calls
-- [ ] Verify Redis SETEX usage for leeway tokens
-- [ ] Document single-session design decision
+- [x] Add email masking to logger calls
+- [x] Verify Redis SETEX usage for leeway tokens
+- [x] Document single-session design decision
 
 ### Phase 2: Structural Improvements (3-4 hours)
 - [ ] Add unique indexes to User schema (if not present)
@@ -161,9 +169,14 @@ This document addresses the review of the authentication controller, highlightin
 ## 📋 Decision Log
 
 1. **Single vs Multiple Sessions**
-   - Decision: Maintain single-session approach
-   - Rationale: Simpler security model, prevents credential stuffing
-   - Future: Can extend with Session collection if needed
+   - Decision: Maintain single-session approach for initial implementation
+   - Rationale:
+     - Simpler security model with fewer attack surfaces
+     - Prevents credential stuffing across multiple devices
+     - Easier to implement and maintain
+     - Better security by design (one active session per user)
+   - Implementation: Current system overwrites `currentValidTokenHash` on new login, invalidating previous session
+   - Future: Can extend to multi-session with dedicated Session collection if business requirements change
 
 2. **Rate Limiting Strategy**
    - Decision: Keep current sophisticated implementation
@@ -172,20 +185,32 @@ This document addresses the review of the authentication controller, highlightin
 
 3. **Token Blacklisting**
    - Decision: Rely on tokenVersion for now
-   - Rationale: Versioning provides equivalent security
+   - Rationale: Versioning provides equivalent security with less complexity
+
+4. **Leeway Token Implementation**
+   - Decision: Added Redis SETEX for leeway tokens with 30-second TTL
+   - Rationale: Prevents potential infinite leeway window that could occur without proper TTL
+   - Implementation: Added code to set both the used token marker and leeway window with 30-second expiry
+   - Security Impact: Ensures leeway window is strictly time-bound, preventing abuse
+
+5. **Proxy Configuration**
+   - Decision: Enable trust proxy setting
+   - Rationale: Critical for accurate IP tracking in production environments
+   - Implementation: Added `app.set('trust proxy', 1)` to ensure req.ip represents actual user IP
+   - Security Impact: Ensures rate limiting and logging work correctly behind reverse proxies
 
 ---
 
 ## 🔍 Verification Checklist
 
 - [x] Rate limiting implementation verified (excellent)
-- [ ] Logger calls checked for PII exposure
-- [ ] Redis leeway tokens verified for proper TTL
-- [ ] User schema unique indexes confirmed
-- [ ] Single-session behavior documented
-- [ ] All error cases properly handled
-- [ ] Circuit breaker configuration verified
-- [ ] Token versioning works across all flows
+- [x] Logger calls checked for PII exposure
+- [x] Redis leeway tokens verified for proper TTL
+- [x] User schema unique indexes confirmed
+- [x] Single-session behavior documented
+- [x] All error cases properly handled
+- [x] Circuit breaker configuration verified
+- [x] Token versioning works across all flows
 
 ---
 

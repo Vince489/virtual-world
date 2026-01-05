@@ -3,6 +3,7 @@ import winston from 'winston';
 import jwt from 'jsonwebtoken';
 import { sendPasswordResetEmail } from '../config/emailService.js';
 import { redisClient, redisBreaker } from '../services/redisService.js';
+import { maskEmail } from '../utils/emailMasker.js';
 import {
   validatePasswordStrength,
   generateResetToken,
@@ -40,21 +41,21 @@ export const signup = async (req, res) => {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
-      logger.warn('Signup attempt with missing fields', { username, email, ip: req.ip });
+      logger.warn('Signup attempt with missing fields', { username, email: maskEmail(email), ip: req.ip });
       return res.status(400).json({ message: 'Username, email, and password are required' });
     }
 
     // Validate password strength
     const passwordError = validatePasswordStrength(password);
     if (passwordError) {
-      logger.warn('Signup attempt with weak password', { username, email, ip: req.ip });
+      logger.warn('Signup attempt with weak password', { username, email: maskEmail(email), ip: req.ip });
       return res.status(400).json({ message: passwordError });
     }
 
     // Check if user exists
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      logger.warn('Signup attempt with existing username or email', { username, email, ip: req.ip });
+      logger.warn('Signup attempt with existing username or email', { username, email: maskEmail(email), ip: req.ip });
       return res.status(409).json({ message: 'Username or email already exists' });
     }
 
@@ -261,6 +262,28 @@ export const refreshToken = async (req, res) => {
     // Generate new refresh token (rotation)
     const { token: newRefreshToken, hash: newTokenHash } = generateRefreshToken(user._id, user.tokenVersion);
 
+    // Mark the old refresh token as used in Redis
+    try {
+      // Set the token as used
+      await redisBreaker.execute(
+        async () => await redisClient.set(usedTokenKey, '1')
+      );
+
+      // Set leeway window for 30 seconds to allow for network delays
+      await redisBreaker.execute(
+        async () => await redisClient.set(`${usedTokenKey}:leeway`, '1', {
+          EX: 30 // 30 seconds TTL
+        })
+      );
+    } catch (redisError) {
+      logger.warn('Failed to mark refresh token as used in Redis', {
+        error: redisError.message,
+        userId: user._id,
+        ip: req.ip
+      });
+      // Continue even if Redis fails - token rotation still works
+    }
+
     // Update the current valid token hash in the user model
     await User.findByIdAndUpdate(user._id, { currentValidTokenHash: newTokenHash });
 
@@ -454,7 +477,7 @@ export const requestPasswordReset = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) {
       // Don't reveal if user exists or not for security
-      logger.info(`Password reset requested for non-existent email: ${email}`, { ip: req.ip });
+      logger.info(`Password reset requested for non-existent email: ${maskEmail(email)}`, { ip: req.ip });
       return res.status(200).json({ message: 'If this email exists in our system, a password reset link has been sent' });
     }
 
