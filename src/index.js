@@ -89,64 +89,66 @@ app.use(cors({
   credentials: true
 }));
 
+// Create rate limiter instances once at boot
+let redisAuth, redisGeneral, memoryAuth, memoryGeneral;
+
+// Always create memory-based limiters as fallback
+memoryAuth = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3, // More restrictive when using memory
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many authentication attempts, please try again later.',
+});
+memoryGeneral = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // More restrictive when using memory
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again in 15 minutes.',
+});
+
+// Function to initialize Redis-based limiters
+const initializeRedisLimiters = async () => {
+  if (isRedisHealthy) {
+    try {
+      const { RedisStore } = await import('rate-limit-redis');
+      redisAuth = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 5, // limit each IP to 5 auth requests per windowMs
+        standardHeaders: true,
+        legacyHeaders: false,
+        store: new RedisStore({
+          sendCommand: (...args) => redisClient.sendCommand(args),
+        }),
+        message: 'Too many authentication attempts, please try again later.',
+      });
+      redisGeneral = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 100, // limit each IP to 100 requests per windowMs
+        standardHeaders: true,
+        legacyHeaders: false,
+        store: new RedisStore({
+          sendCommand: (...args) => redisClient.sendCommand(args),
+        }),
+        message: 'Too many requests from this IP, please try again in 15 minutes.',
+      });
+    } catch (error) {
+      console.error('Failed to create Redis-based rate limiter, falling back to memory:', error);
+    }
+  }
+};
+
 // Function to get the appropriate limiter based on Redis health
 const getRateLimiter = (isAuthRoute = false) => {
-  return async (req, res, next) => {
-    let limiter;
+  return (req, res, next) => {
+    // Skip general limiter for auth routes to avoid ERR_ERL_DOUBLE_COUNT
+    if (!isAuthRoute && req.path.startsWith('/auth')) return next();
 
-    // Check Redis health dynamically on every request
-    if (isRedisHealthy) {
-      try {
-        const { RedisStore } = await import('rate-limit-redis');
-
-if (isAuthRoute) {
-          limiter = rateLimit({
-            windowMs: 15 * 60 * 1000, // 15 minutes
-            max: 5, // limit each IP to 5 auth requests per windowMs
-            standardHeaders: true,
-            legacyHeaders: false,
-            store: new RedisStore({
-              sendCommand: (...args) => redisClient.sendCommand(args),
-            }),
-            message: 'Too many authentication attempts, please try again later.',
-          });
-        } else {
-          limiter = rateLimit({
-            windowMs: 15 * 60 * 1000, // 15 minutes
-            max: 100, // limit each IP to 100 requests per windowMs
-            standardHeaders: true,
-            legacyHeaders: false,
-            store: new RedisStore({
-              sendCommand: (...args) => redisClient.sendCommand(args),
-            }),
-            message: 'Too many requests from this IP, please try again in 15 minutes.',
-          });
-        }
-      } catch (error) {
-        console.error('Failed to create Redis-based rate limiter, falling back to memory:', error);
-      }
-    }
-
-    // Fallback to memory-based limiter if Redis is not healthy
-    if (!limiter) {
-if (isAuthRoute) {
-        limiter = rateLimit({
-          windowMs: 15 * 60 * 1000, // 15 minutes
-          max: 3, // More restrictive when using memory
-          standardHeaders: true,
-          legacyHeaders: false,
-          message: 'Too many authentication attempts, please try again later.',
-        });
-      } else {
-        limiter = rateLimit({
-          windowMs: 15 * 60 * 1000, // 15 minutes
-          max: 50, // More restrictive when using memory
-          standardHeaders: true,
-          legacyHeaders: false,
-          message: 'Too many requests from this IP, please try again in 15 minutes.',
-        });
-      }
-    }
+    // Use the health check to decide which ALREADY CREATED instance to use
+    const limiter = isRedisHealthy && redisAuth && redisGeneral
+      ? (isAuthRoute ? redisAuth : redisGeneral)
+      : (isAuthRoute ? memoryAuth : memoryGeneral);
 
     return limiter(req, res, next);
   };
@@ -174,6 +176,9 @@ app.use(errorHandler);
 
 app.use('/auth', authLimiter, authRoutes);
 app.use('/health', healthRoutes);
+
+// Initialize Redis-based limiters before starting the server
+await initializeRedisLimiters();
 
 connectDB();
 
