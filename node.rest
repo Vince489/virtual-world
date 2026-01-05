@@ -2,8 +2,8 @@ POST http://localhost:3080/auth/signup
 Content-Type: application/json
 
 {
-    "username": "vince",
-    "email": "vincentcornelius489@gmail.com",
+    "username": "Robs2",
+    "email": "robs2@gmail.com",
     "password": "1234qwQW!"
 }
 
@@ -12,8 +12,8 @@ POST http://localhost:3080/auth/login
 Content-Type: application/json
 
 {
-    "username": "bob3",
-    "email": "bob3@aol.com",
+    "username": "Robs2",
+    "email": "robs2@gmail.com",
     "password": "1234qwQW!"
 }
 

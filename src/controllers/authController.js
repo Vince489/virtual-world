@@ -1,18 +1,17 @@
-import { hash, verify, Algorithm } from '@node-rs/argon2';
-import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import winston from 'winston';
-import { createClient } from 'redis';
-import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { sendPasswordResetEmail } from '../config/emailService.js';
-
-// Create Redis client for tracking used refresh tokens
-const redisClient = createClient({
-  url: 'redis://localhost:6379'
-});
-
-// Connect to Redis
-redisClient.connect().catch(console.error);
+import { redisClient, redisBreaker } from '../services/redisService.js';
+import {
+  validatePasswordStrength,
+  generateResetToken,
+  generateAccessToken,
+  generateRefreshToken,
+  hashPassword,
+  verifyPassword,
+  generateTokenHash
+} from '../services/authService.js';
 
 const logger = winston.createLogger({
   level: 'info',
@@ -26,61 +25,6 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: 'logs/combined.log' })
   ]
 });
-
-const argon2Options = {
-  memoryCost: 65536, // 64 MB
-  timeCost: 3,       // 3 iterations
-  parallelism: 4,    // 4 threads
-  algorithm: Algorithm.Argon2id,    // Use the id variant
-};
-
-// Generate a secure random token for password reset
-const generateResetToken = () => {
-  return crypto.randomBytes(32).toString('hex');
-};
-
-// Password strength validation
-const validatePasswordStrength = (password) => {
-  const minLength = 8;
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasLowerCase = /[a-z]/.test(password);
-  const hasNumbers = /\d/.test(password);
-  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-
-  if (password.length < minLength) {
-    return 'Password must be at least 8 characters long';
-  }
-  if (!hasUpperCase) {
-    return 'Password must contain at least one uppercase letter';
-  }
-  if (!hasLowerCase) {
-    return 'Password must contain at least one lowercase letter';
-  }
-  if (!hasNumbers) {
-    return 'Password must contain at least one number';
-  }
-  if (!hasSpecialChar) {
-    return 'Password must contain at least one special character';
-  }
-  return null; // Valid
-};
-
-// Generate JWT tokens
-const generateAccessToken = (userId, tokenVersion) => {
-  return jwt.sign(
-    { userId, tokenVersion },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE }
-  );
-};
-
-const generateRefreshToken = (userId, tokenVersion) => {
-  return jwt.sign(
-    { userId, tokenVersion },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRE }
-  );
-};
 
 /**
  * Utility function to fetch the full user object when needed
@@ -114,7 +58,7 @@ export const signup = async (req, res) => {
       return res.status(409).json({ message: 'Username or email already exists' });
     }
 
-    const hashedPassword = await hash(password, argon2Options);
+    const hashedPassword = await hashPassword(password);
 
     const newUser = new User({
       username,
@@ -164,7 +108,7 @@ export const login = async (req, res) => {
       return res.status(423).json({ message: 'Account is temporarily locked due to too many failed attempts' });
     }
 
-    const isValidPassword = await verify(user.password, password, argon2Options);
+    const isValidPassword = await verifyPassword(user.password, password);
     if (!isValidPassword) {
       // Increment failed attempts
       await user.incLoginAttempts();
@@ -179,7 +123,7 @@ export const login = async (req, res) => {
 
     // Generate tokens with tokenVersion
     const accessToken = generateAccessToken(user._id, user.tokenVersion);
-    const refreshToken = generateRefreshToken(user._id, user.tokenVersion);
+    const { token: refreshToken, hash: tokenHash } = generateRefreshToken(user._id, user.tokenVersion);
 
     // Set secure cookies
     res.cookie('accessToken', accessToken, {
@@ -195,6 +139,9 @@ export const login = async (req, res) => {
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
+
+    // Update the current valid token hash in the user model
+    await User.findByIdAndUpdate(user._id, { currentValidTokenHash: tokenHash });
 
     logger.info(`Successful login for user: ${username}`, { ip: req.ip });
     res.json({
@@ -214,7 +161,7 @@ export const login = async (req, res) => {
 
 /**
  * Refresh access token using refresh token
- * Implements refresh token rotation for security
+ * Implements refresh token rotation for security with Redis resilience
  */
 export const refreshToken = async (req, res) => {
   try {
@@ -227,21 +174,46 @@ export const refreshToken = async (req, res) => {
 
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    const usedTokenKey = `usedRefreshToken:${refreshToken}`;
 
     // Check if this refresh token has been used before (potential breach)
-    const usedTokenKey = `usedRefreshToken:${refreshToken}`;
-    const isTokenUsed = await redisClient.get(usedTokenKey);
+    // Use circuit breaker and safe operation pattern
+    let isTokenUsed = null;
+    let isRecentReuse = null;
+    let redisErrorOccurred = false;
 
-    if (isTokenUsed) {
-      // Check if this is a recent reuse (within 30 seconds)
-      const isRecentReuse = await redisClient.get(`${usedTokenKey}:leeway`);
+    try {
+      // Check if token was used before (with circuit breaker)
+      isTokenUsed = await redisBreaker.execute(
+        async () => await redisClient.get(usedTokenKey)
+      );
 
-      if (isRecentReuse) {
-        // Allow reuse within 30-second leeway window
-        logger.warn(`Refresh token reused within leeway window for user: ${decoded.userId}`, { ip: req.ip });
-      } else {
+      if (isTokenUsed) {
+        // Check for recent reuse within leeway window
+        isRecentReuse = await redisBreaker.execute(
+          async () => await redisClient.get(`${usedTokenKey}:leeway`)
+        );
+      }
+    } catch (redisError) {
+      logger.warn('Redis operation failed during token validation', {
+        error: redisError.message,
+        userId: decoded.userId,
+        ip: req.ip
+      });
+      redisErrorOccurred = true;
+    }
+
+    if (redisErrorOccurred) {
+      // Continue with token version validation only
+      logger.warn('Proceeding with MongoDB-only token validation due to Redis failure');
+    } else if (isTokenUsed) {
+      // Redis is working - proceed with normal reuse detection
+      if (!isRecentReuse) {
         // Outside leeway window - potential breach
-        logger.error(`CRITICAL: Refresh token reuse detected for user: ${decoded.userId} - Potential security breach!`, { ip: req.ip, severity: 'high' });
+        logger.error(`CRITICAL: Refresh token reuse detected for user: ${decoded.userId} - Potential security breach!`, {
+          ip: req.ip,
+          severity: 'high'
+        });
 
         // Increment token version to invalidate all tokens for this user
         await User.findByIdAndUpdate(decoded.userId, { $inc: { tokenVersion: 1 } });
@@ -253,6 +225,9 @@ export const refreshToken = async (req, res) => {
         return res.status(401).json({
           message: 'Security alert: Potential token breach detected. Please login again.'
         });
+      } else {
+        // Allow reuse within 30-second leeway window
+        logger.warn(`Refresh token reused within leeway window for user: ${decoded.userId}`, { ip: req.ip });
       }
     }
 
@@ -270,25 +245,24 @@ export const refreshToken = async (req, res) => {
       return res.status(401).json({ message: 'Token version mismatch - please login again' });
     }
 
+    // Only check token hash if we're not in the Redis leeway window
+    // This prevents the "double lock" conflict where Redis allows reuse but DB hash check rejects it
+    if (!isRecentReuse) {
+      const tokenHash = generateTokenHash(refreshToken);
+      if (user.currentValidTokenHash && user.currentValidTokenHash !== tokenHash) {
+        logger.warn(`Refresh token attempt with invalid token hash for user: ${user.username}`, { ip: req.ip });
+        return res.status(401).json({ message: 'Token invalid - please login again' });
+      }
+    }
+
     // Generate new access token
     const newAccessToken = generateAccessToken(user._id, user.tokenVersion);
 
     // Generate new refresh token (rotation)
-    const newRefreshToken = generateRefreshToken(user._id, user.tokenVersion);
+    const { token: newRefreshToken, hash: newTokenHash } = generateRefreshToken(user._id, user.tokenVersion);
 
-    // Mark the old refresh token as used in Redis (with expiration matching the token's remaining lifetime)
-    const decodedRefreshToken = jwt.decode(refreshToken);
-    const remainingLifetime = decodedRefreshToken.exp - Math.floor(Date.now() / 1000);
-
-    // Set the token as used
-    await redisClient.set(`usedRefreshToken:${refreshToken}`, 'true', {
-      EX: Math.max(remainingLifetime, 0) // Use remaining lifetime or 0 if already expired
-    });
-
-    // Set leeway window for 30 seconds
-    await redisClient.set(`${usedTokenKey}:leeway`, 'true', {
-      EX: 30 // 30-second leeway window
-    });
+    // Update the current valid token hash in the user model
+    await User.findByIdAndUpdate(user._id, { currentValidTokenHash: newTokenHash });
 
     // Set new access token cookie
     res.cookie('accessToken', newAccessToken, {
@@ -316,6 +290,17 @@ export const refreshToken = async (req, res) => {
     if (error.name === 'TokenExpiredError') {
       logger.warn('Expired refresh token attempt', { ip: req.ip });
       return res.status(401).json({ message: 'Refresh token expired' });
+    }
+    if (error.message.includes('Redis') || error.message.includes('circuit breaker')) {
+      logger.error('Redis-related error during token refresh', {
+        error: error.message,
+        ip: req.ip
+      });
+      return res.status(503).json({
+        message: 'Authentication service temporarily unavailable',
+        code: 'AUTH_SERVICE_TEMPORARILY_UNAVAILABLE',
+        retryAfter: 300 // 5 minutes
+      });
     }
     logger.error('Refresh token error:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -351,11 +336,22 @@ export const logoutAll = async (req, res) => {
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
-    // Increment token version
+    // Increment token version (critical operation - must succeed)
     await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
 
-    // Delete Redis cache for token version
-    await redisClient.del(`tokenVersion:${userId}`);
+    // Attempt to clean up Redis cache, but don't fail if Redis is down
+    try {
+      await redisBreaker.execute(
+        async () => await redisClient.del(`tokenVersion:${userId}`)
+      );
+    } catch (redisError) {
+      logger.warn('Failed to clean up Redis cache during logoutAll', {
+        error: redisError.message,
+        userId,
+        ip: req.ip
+      });
+      // Continue despite Redis failure - token version increment is what matters
+    }
 
     // Clear cookies
     res.clearCookie('accessToken');
@@ -401,14 +397,14 @@ export const updatePassword = async (req, res) => {
     }
 
     // Verify current password
-    const isValidPassword = await verify(user.password, currentPassword, argon2Options);
+    const isValidPassword = await verifyPassword(user.password, currentPassword);
     if (!isValidPassword) {
       logger.warn(`Invalid current password for user: ${userId}`, { ip: req.ip });
       return res.status(401).json({ message: 'Current password is incorrect' });
     }
 
     // Hash new password
-    const hashedPassword = await hash(newPassword, argon2Options);
+    const hashedPassword = await hashPassword(newPassword);
 
     // Update password and increment token version
     await User.findByIdAndUpdate(userId, {
@@ -416,8 +412,19 @@ export const updatePassword = async (req, res) => {
       $inc: { tokenVersion: 1 }
     });
 
-    // Delete Redis cache for token version
-    await redisClient.del(`tokenVersion:${userId}`);
+    // Attempt to clean up Redis cache, but don't fail if Redis is down
+    try {
+      await redisBreaker.execute(
+        async () => await redisClient.del(`tokenVersion:${userId}`)
+      );
+    } catch (redisError) {
+      logger.warn('Failed to clean up Redis cache during password update', {
+        error: redisError.message,
+        userId,
+        ip: req.ip
+      });
+      // Continue despite Redis failure - token version increment is what matters
+    }
 
     // Clear cookies
     res.clearCookie('accessToken');
@@ -520,7 +527,7 @@ export const resetPassword = async (req, res) => {
     }
 
     // Hash new password
-    const hashedPassword = await hash(newPassword, argon2Options);
+    const hashedPassword = await hashPassword(newPassword);
 
     // Update password, clear reset token, and increment token version
     await User.findByIdAndUpdate(user._id, {
@@ -530,8 +537,19 @@ export const resetPassword = async (req, res) => {
       $inc: { tokenVersion: 1 }
     });
 
-    // Delete Redis cache for token version
-    await redisClient.del(`tokenVersion:${user._id}`);
+    // Attempt to clean up Redis cache, but don't fail if Redis is down
+    try {
+      await redisBreaker.execute(
+        async () => await redisClient.del(`tokenVersion:${user._id}`)
+      );
+    } catch (redisError) {
+      logger.warn('Failed to clean up Redis cache during password reset', {
+        error: redisError.message,
+        userId: user._id,
+        ip: req.ip
+      });
+      // Continue despite Redis failure - token version increment is what matters
+    }
 
     logger.info(`Password reset successfully for user: ${user.username}`, { ip: req.ip });
     res.json({ message: 'Password reset successfully. Please login with your new password.' });

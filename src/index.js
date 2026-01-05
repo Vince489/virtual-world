@@ -1,9 +1,11 @@
 import 'dotenv/config';
 import express from 'express';
+import { validateEnv } from './config/validateEnv.js';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
+import healthRoutes from './routes/healthRoutes.js';
 import winston from 'winston';
 import morgan from 'morgan';
 import fs from 'fs';
@@ -11,11 +13,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { redisClient, isRedisHealthy } from './services/redisService.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
-const PORT = process.env.PORT;
+// Validate environment variables
+validateEnv();
 
+const PORT = process.env.PORT;
 // Configure Winston logger
 const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -79,30 +85,81 @@ if (process.env.NODE_ENV === 'production') {
 app.use(cors({
   origin: ['http://localhost:3000'], // Add your trusted domains here
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  credentials: true
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again in 15 minutes.',
-});
+// Function to get the appropriate limiter based on Redis health
+const getRateLimiter = (isAuthRoute = false) => {
+  return async (req, res, next) => {
+    let limiter;
 
-app.use(limiter);
+    // Check Redis health dynamically on every request
+    if (isRedisHealthy) {
+      try {
+        const { RedisStore } = await import('rate-limit-redis');
 
-// Auth routes with stricter rate limiting
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 auth requests per windowMs
-  message: 'Too many authentication attempts, please try again later.',
-});
+if (isAuthRoute) {
+          limiter = rateLimit({
+            windowMs: 15 * 60 * 1000, // 15 minutes
+            max: 5, // limit each IP to 5 auth requests per windowMs
+            standardHeaders: true,
+            legacyHeaders: false,
+            store: new RedisStore({
+              sendCommand: (...args) => redisClient.sendCommand(args),
+            }),
+            message: 'Too many authentication attempts, please try again later.',
+          });
+        } else {
+          limiter = rateLimit({
+            windowMs: 15 * 60 * 1000, // 15 minutes
+            max: 100, // limit each IP to 100 requests per windowMs
+            standardHeaders: true,
+            legacyHeaders: false,
+            store: new RedisStore({
+              sendCommand: (...args) => redisClient.sendCommand(args),
+            }),
+            message: 'Too many requests from this IP, please try again in 15 minutes.',
+          });
+        }
+      } catch (error) {
+        console.error('Failed to create Redis-based rate limiter, falling back to memory:', error);
+      }
+    }
+
+    // Fallback to memory-based limiter if Redis is not healthy
+    if (!limiter) {
+if (isAuthRoute) {
+        limiter = rateLimit({
+          windowMs: 15 * 60 * 1000, // 15 minutes
+          max: 3, // More restrictive when using memory
+          standardHeaders: true,
+          legacyHeaders: false,
+          message: 'Too many authentication attempts, please try again later.',
+        });
+      } else {
+        limiter = rateLimit({
+          windowMs: 15 * 60 * 1000, // 15 minutes
+          max: 50, // More restrictive when using memory
+          standardHeaders: true,
+          legacyHeaders: false,
+          message: 'Too many requests from this IP, please try again in 15 minutes.',
+        });
+      }
+    }
+
+    return limiter(req, res, next);
+  };
+};
 
 // Logging middleware for security events
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.url} - IP: ${req.ip}`);
   next();
 });
+
+// Auth routes with stricter rate limiting
+const authLimiter = getRateLimiter(true);
 
 // Note: express-rate-limit doesn't emit events for logging in this version
 
@@ -113,12 +170,10 @@ app.get('/', (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error(`Error: ${err.message} - Stack: ${err.stack}`);
-  res.status(500).json({ message: 'Internal server error' });
-});
+app.use(errorHandler);
 
-app.use('/auth', authRoutes);
+app.use('/auth', authLimiter, authRoutes);
+app.use('/health', healthRoutes);
 
 connectDB();
 

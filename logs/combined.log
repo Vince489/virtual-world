@@ -38,3 +38,44 @@
 {"level":"info","message":"POST /auth/forgot-password - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T03:25:08.662Z"}
 {"accepted":["vincentcornelius489@gmail.com"],"level":"info","message":"Password reset email sent to vincentcornelius489@gmail.com","messageId":"<6e0ef655-440c-8283-9204-7810f8249786@virtron.cc>","rejected":[],"timestamp":"2026-01-04T03:25:09.976Z"}
 {"ip":"::ffff:127.0.0.1","level":"info","message":"Password reset email sent to user: vince","timestamp":"2026-01-04T03:25:09.977Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:48:30.560Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:48:30.562Z"}
+{"level":"info","message":"POST /auth/login - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T23:49:43.984Z"}
+{"ip":"::ffff:127.0.0.1","level":"info","message":"Successful login for user: bob3","timestamp":"2026-01-04T23:49:44.269Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T23:50:36.336Z"}
+{"email":"vincentcornelius489@gmail.com","ip":"::ffff:127.0.0.1","level":"warn","message":"Signup attempt with existing username or email","timestamp":"2026-01-04T23:50:36.343Z","username":"vince2"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T23:50:54.799Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:53:08.204Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:53:08.206Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T23:53:30.992Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:55:31.207Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:55:31.209Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:55:57.461Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:55:57.463Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T23:56:43.432Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:57:07.522Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:57:07.524Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:57:25.286Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:57:25.287Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-04T23:58:05.708Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-04T23:58:41.555Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-04T23:58:41.558Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::1","timestamp":"2026-01-04T23:58:56.767Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-05T00:02:29.221Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-05T00:02:29.223Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-05T00:02:30.468Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-05T00:02:30.470Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::ffff:127.0.0.1","timestamp":"2026-01-05T00:02:47.442Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::1","timestamp":"2026-01-05T00:03:28.803Z"}
+{"email":"test@example.com","ip":"::1","level":"warn","message":"Signup attempt with missing fields","timestamp":"2026-01-05T00:03:28.807Z"}
+{"level":"info","message":"POST /auth/signup - IP: ::1","timestamp":"2026-01-05T00:03:53.786Z"}
+{"email":"test@example.com","ip":"::1","level":"warn","message":"Signup attempt with weak password","timestamp":"2026-01-05T00:03:53.791Z","username":"testuser"}
+{"level":"info","message":"POST /auth/signup - IP: ::1","timestamp":"2026-01-05T00:03:59.741Z"}
+{"email":"test@example.com","ip":"::1","level":"warn","message":"Signup attempt with weak password","timestamp":"2026-01-05T00:03:59.744Z","username":"testuser"}
+{"level":"info","message":"POST /auth/signup - IP: ::1","timestamp":"2026-01-05T00:04:04.500Z"}
+{"email":"test@example.com","ip":"::1","level":"warn","message":"Signup attempt with weak password","timestamp":"2026-01-05T00:04:04.502Z","username":"testuser"}
+{"level":"info","message":"POST /auth/signup - IP: ::1","timestamp":"2026-01-05T00:04:12.607Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-05T00:06:51.491Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-05T00:06:51.494Z"}
+{"level":"info","message":"Redis connection established","timestamp":"2026-01-05T00:06:53.571Z"}
+{"level":"info","message":"Successfully connected to Redis","timestamp":"2026-01-05T00:06:53.573Z"}

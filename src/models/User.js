@@ -39,6 +39,10 @@ const userSchema = new mongoose.Schema({
   resetTokenExpires: {
     type: Date,
     default: null
+  },
+  currentValidTokenHash: {
+    type: String,
+    default: null
   }
 }, {
   strict: true, // Prevent additional fields
